@@ -1,262 +1,378 @@
-# ML-Douban-BoxOffice-Analysis
+# 豆瓣电影票房预测及可视化分析系统
 
-# 豆瓣电影票房预测系统 - 启动指南
+## 项目简介
 
-## 系统架构
+本系统是基于机器学习的豆瓣电影票房预测及可视化分析平台，提供完整的数据获取、模型训练、预测和可视化功能。
 
+### 核心功能
+
+- **数据获取**：支持豆瓣爬虫爬取和Excel文件上传两种方式
+- **模型训练**：集成线性回归、XGBoost等多种预测模型
+- **票房预测**：单个电影预测和批量预测功能
+- **数据可视化**：丰富的图表展示数据规律和模型性能
+
+### 技术亮点
+
+- 前后端分离架构，RESTful API设计
+- 异步任务处理，支持长时间训练和爬取
+- 特征工程自动化，相关性分析和VIF检验
+- 模型性能对比，自动选择最优模型
+- 响应式前端界面，支持多种数据可视化
+
+## 项目架构
+
+```mermaid
+flowchart LR
+  U["用户"] --> FE["前端（Vue3）"]
+  FE --> API["Axios API 层"]
+
+  API --> BE["后端（FastAPI）"]
+
+  BE --> S1["数据服务<br/>上传 / 清洗 / 导入"]
+  BE --> S2["模型服务<br/>特征工程 / 训练 / 评估"]
+  BE --> S3["预测服务<br/>单条 / 批量 / 历史"]
+  BE --> S4["可视化服务<br/>统计聚合 / 图表数据"]
+
+  S1 --> DB[("SQLite<br/>doubanban.db")]
+  S2 --> DB
+  S3 --> DB
+  S4 --> DB
+
+  S2 --> M["模型文件<br/>ml_models/*.pkl"]
+  S3 --> M
+  S4 --> M
+
+  X["Excel / CSV"] --> S1
+  D["豆瓣页面数据"] --> BE
+
+  classDef app fill:#EAF3FF,stroke:#4E79A7,stroke-width:1.1px,color:#1F2D3D;
+  classDef svc fill:#FFF7E8,stroke:#D4A72C,stroke-width:1.1px,color:#3D2F12;
+  classDef store fill:#F5F5F5,stroke:#7A7A7A,stroke-width:1.1px,color:#2F2F2F;
+  classDef ext fill:#F7F9FC,stroke:#9AA5B1,stroke-width:1.1px,color:#2E3A46;
+
+  class U,FE,API,BE app;
+  class S1,S2,S3,S4 svc;
+  class DB,M store;
+  class X,D ext;
 ```
-doubanban/
-├── backend/           # 后端 (FastAPI + Python)
-│   ├── app/
-│   │   ├── api/      # API接口
-│   │   ├── models/   # 数据模型
-│   │   ├── schemas/  # 数据验证
-│   │   ├── services/ # 业务逻辑
-│   │   └── utils/    # 工具函数
-│   ├── ml_models/    # 训练好的模型
-│   ├── data/         # 数据文件
-│   └── doubanban.db  # SQLite数据库
-└── frontend/          # 前端 (Vue 3)
-    └── src/
-        ├── api/      # API调用
-        ├── views/    # 页面组件
-        ├── router/   # 路由配置
-        └── assets/   # 静态资源
-```
 
-## 快速启动
+## 界面预览
+
+### 数据概览
+![数据概览](./docs/images/dashboard-overview.png)
+
+### 模型训练
+![模型训练](./docs/images/model-training.png)
+
+### 数据可视化
+![数据可视化](./docs/images/data-visualization.png)
+
+## 技术栈
+
+### 后端
+- Python 3.10+
+- FastAPI - 现代化Web框架
+- SQLAlchemy - ORM框架
+- Pandas/NumPy - 数据处理
+- Scikit-learn - 基准机器学习模型
+- XGBoost - 进阶预测模型
+- Jieba/TextBlob - 中文NLP处理
+- BeautifulSoup4 - 网页解析
+
+### 前端
+- Vue 3 - 前端框架
+- Element Plus - UI组件库
+- ECharts - 数据可视化
+- Axios - HTTP客户端
+- Pinia - 状态管理
+
+## 快速开始
 
 ### 方式一：使用启动脚本（推荐）
 
 **后端启动：**
-
 ```bash
-cd /home/test/桌面/doubanban/backend
+cd backend
 chmod +x start.sh
 ./start.sh
 ```
 
 **前端启动（新终端）：**
-
 ```bash
-cd /home/test/桌面/doubanban/frontend
+cd frontend
 chmod +x start.sh
 ./start.sh
 ```
 
 ### 方式二：手动启动
 
-**1. 启动后端服务**
-
+**1. 后端服务**
 ```bash
-cd /home/test/桌面/doubanban/backend
+cd backend
 
-# 安装依赖（首次运行）
+# 安装依赖
 pip install -r requirements.txt
 
 # 启动服务
 python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**2. 启动前端服务（新终端）**
-
+**2. 前端服务（新终端）**
 ```bash
-cd /home/test/桌面/doubanban/frontend
+cd frontend
 
-# 安装依赖（首次运行）
+# 安装依赖
 npm install
 
 # 启动服务
 npm run dev
 ```
 
-## 访问地址
+### 访问地址
 
 - **前端界面**: http://localhost:5173
 - **API文档**: http://localhost:8000/docs
-- **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
 
 ## 系统功能
 
 ### 1. 数据概览
-
-- 展示系统统计数据
+- 系统统计数据展示
 - 年度票房趋势图
 - Top电影榜单
+- 数据来源分布
 
 ### 2. 数据管理
-
-- **爬虫采集**: 配置并启动豆瓣数据爬虫
-- **文件上传**: 上传Excel文件导入票房数据
-- **数据列表**: 查看、搜索、删除电影数据
+- **爬虫采集**：
+  - 配置年份范围、最低评分、最大爬取数
+  - 实时显示爬取进度
+  - 爬取历史记录查看
+- **文件上传**：
+  - 拖拽上传Excel文件
+  - 数据预览和字段映射
+  - 支持自定义字段配置
+- **数据列表**：
+  - 搜索和筛选功能
+  - 分页显示
+  - 查看详情和删除
 
 ### 3. 模型训练
-
-- 选择模型类型（XGBoost/线性回归）
-- 配置训练参数
-- 实时查看训练进度
-- 查看训练结果和模型性能
-
-### 4. 票房预测
-
-- **单个预测**: 选择电影或手动输入特征进行预测
-- **批量预测**: 上传Excel文件批量预测
-- **预测历史**: 查看历史预测记录
-
-### 5. 数据可视化
-
-- 评分-票房散点图
-- 类型票房分布箱线图
+- 支持多种模型选择（XGBoost/线性回归）
+- 超参数自动调优
+- 交叉验证评估
+- 实时训练进度显示
+- 训练日志记录
 - 模型性能对比
 - 特征重要性分析
-- 年度趋势图
-- 预测vs实际对比
 
-## 数据导入
+### 4. 票房预测
+- **单个预测**：
+  - 选择已有电影或手动输入
+  - 多模型预测支持
+  - 置信区间计算
+  - 特征贡献度展示
+  - 实际票房对比
+- **批量预测**：
+  - Excel批量上传
+  - 预测结果导出
+- **预测历史**：
+  - 历史记录查询
+  - 预测结果查看
 
-### Excel文件格式
+### 5. 数据可视化
+- 评分-票房散点图
+- 类型票房分布箱线图
+- 模型性能对比柱状图
+- 特征重要性横向柱状图
+- 年度票房趋势折线图
+- 预测vs实际对比图
 
-支持以下字段（可包含部分字段）：
+## API接口
 
-| 字段名     | 说明     | 必填 |
-| ---------- | -------- | ---- |
-| 片名       | 电影名称 | 是   |
-| 上映年份   | 上映年份 | 否   |
-| 票房(万元) | 票房数据 | 是   |
-| 平均票价   | 平均票价 | 否   |
-| 场均人次   | 场均人次 | 否   |
-| 排名       | 排名     | 否   |
+### 数据管理 (/api/data)
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| /api/data/upload | POST | 上传Excel文件 |
+| /api/data/import | POST | 导入数据 |
+| /api/data/movies | GET | 获取电影列表 |
+| /api/data/movies/{id} | GET | 获取电影详情 |
+| /api/data/movies | POST | 添加电影 |
+| /api/data/movies/{id} | PUT | 更新电影 |
+| /api/data/movies/{id} | DELETE | 删除电影 |
+| /api/data/stats | GET | 数据统计 |
+| /api/data/export | POST | 导出数据 |
+| /api/data/template | GET | 下载模板 |
 
-### 下载模板
+### 爬虫管理 (/api/crawl)
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| /api/crawl/start | POST | 开始爬取 |
+| /api/crawl/status | GET | 查询状态 |
+| /api/crawl/stop | POST | 停止爬取 |
+| /api/crawl/config | GET | 获取配置 |
+| /api/crawl/config | PUT | 更新配置 |
+| /api/crawl/history | GET | 爬取历史 |
 
-在"数据管理"页面点击"下载模板"按钮获取标准模板。
+### 模型训练 (/api/model)
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| /api/model/train | POST | 开始训练 |
+| /api/model/status | GET | 查询状态 |
+| /api/model/list | GET | 模型列表 |
+| /api/model/select | POST | 选择模型 |
+| /api/model/metrics/{type} | GET | 模型指标 |
 
-## 常见问题
+### 预测接口 (/api/predict)
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| /api/predict/single | POST | 单个预测 |
+| /api/predict/batch | POST | 批量预测 |
+| /api/predict/history | GET | 预测历史 |
+| /api/predict/{id} | GET | 预测详情 |
+| /api/predict/compare/{id} | GET | 模型对比 |
 
-### 1. 后端启动失败
+### 可视化接口 (/api/visualize)
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| /api/visualize/rating-boxoffice | GET | 评分-票房散点图 |
+| /api/visualize/genre-distribution | GET | 类型票房分布 |
+| /api/visualize/model-comparison | GET | 模型性能对比 |
+| /api/visualize/feature-importance | GET | 特征重要性 |
+| /api/visualize/predict-comparison | GET | 预测对比 |
+| /api/visualize/year-trend | GET | 年度趋势 |
+| /api/visualize/top-movies | GET | Top电影 |
+| /api/visualize/data-overview | GET | 数据概览 |
 
-```bash
-# 检查Python版本（需要3.8+）
-python3 --version
+## 项目结构
 
-# 重新安装依赖
-pip install -r requirements.txt
-
-# 检查数据库权限
-ls -la doubanban.db
+```
+doubanban/
+├── backend/                    # 后端项目
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py            # FastAPI应用入口
+│   │   ├── config.py          # 配置文件
+│   │   ├── database.py        # 数据库连接
+│   │   ├── models/            # SQLAlchemy模型
+│   │   │   ├── movie.py
+│   │   │   ├── prediction.py
+│   │   │   └── task.py
+│   │   ├── schemas/           # Pydantic schemas
+│   │   ├── api/               # API路由
+│   │   │   ├── data.py
+│   │   │   ├── crawl.py
+│   │   │   ├── model.py
+│   │   │   ├── predict.py
+│   │   │   └── visualize.py
+│   │   ├── services/          # 业务逻辑
+│   │   │   ├── crawler.py
+│   │   │   ├── data_import.py
+│   │   │   ├── feature_engineering.py
+│   │   │   ├── model_trainer.py
+│   │   │   └── predictor.py
+│   │   └── utils/             # 工具函数
+│   ├── ml_models/             # 训练好的模型
+│   ├── data/                  # 数据文件
+│   ├── temp/                  # 临时文件
+│   ├── requirements.txt
+│   ├── start.sh               # 启动脚本
+│   └── doubanban.db           # SQLite数据库
+├── frontend/                   # 前端项目
+│   ├── src/
+│   │   ├── api/               # API调用
+│   │   │   ├── index.js
+│   │   │   ├── data.js
+│   │   │   ├── crawl.js
+│   │   │   ├── model.js
+│   │   │   ├── predict.js
+│   │   │   └── visualize.js
+│   │   ├── views/             # 页面组件
+│   │   │   ├── Dashboard.vue
+│   │   │   ├── DataManage.vue
+│   │   │   ├── ModelTrain.vue
+│   │   │   ├── Predict.vue
+│   │   │   └── Visualize.vue
+│   │   ├── router/            # 路由配置
+│   │   ├── assets/            # 静态资源
+│   │   ├── App.vue
+│   │   └── main.js
+│   ├── index.html
+│   ├── vite.config.js
+│   ├── package.json
+│   └── start.sh               # 启动脚本
+├── 电影票房.xlsx               # 示例数据
+├── enhanced_box_office_data(2000-2024)u.csv
+├── README.md
+└── 部署指南.md
 ```
 
-### 2. 前端无法连接后端
+## 数据库模型
 
-```bash
-# 检查后端是否运行
-curl http://localhost:8000/health
-
-# 检查CORS配置
-# 确保 backend/app/config.py 中的 CORS_ORIGINS 包含前端地址
+### Movie (电影表)
+```python
+- id: 主键
+- douban_id: 豆瓣ID
+- title: 电影名称
+- type: 电影类型
+- release_year: 上映年份
+- rating: 豆瓣评分
+- rating_count: 评分人数
+- wish_count: 想看人数
+- box_office_wan: 票房(万元)
+- avg_price: 平均票价
+- data_source: 数据来源(crawl/upload/manual)
 ```
 
-### 3. 模型训练失败
-
-```bash
-# 检查数据量
-sqlite3 doubanban.db "SELECT COUNT(*) FROM movies WHERE box_office_wan IS NOT NULL;"
-
-# 确保至少有100条带票房的数据
+### Prediction (预测记录表)
+```python
+- id: 主键
+- movie_id: 关联电影ID
+- model_type: 模型类型
+- predicted_box_office: 预测票房
+- confidence_lower: 置信区间下限
+- confidence_upper: 置信区间上限
+- feature_importance: 特征重要性(JSON)
 ```
 
-### 4. 爬虫无法启动
-
-- 豆瓣可能有反爬限制，建议：
-  - 降低爬取速度
-  - 使用代理IP池
-  - 添加请求延迟
-
-## 开发说明
-
-### API接口
-
-所有API接口已在 `backend/app/api/` 目录下实现：
-
-- `data.py` - 数据管理接口
-- `crawl.py` - 爬虫接口
-- `model.py` - 模型训练接口
-- `predict.py` - 预测接口
-- `visualize.py` - 可视化接口
-
-### 前端组件
-
-- `Dashboard.vue` - 数据概览
-- `DataManage.vue` - 数据管理
-- `ModelTrain.vue` - 模型训练
-- `Predict.vue` - 票房预测
-- `Visualize.vue` - 数据可视化
-
-### 数据库模型
-
-- `Movie` - 电影信息表
-- `Prediction` - 预测记录表
-- `Task` - 异步任务表
-
-## 技术栈
-
-**后端:**
-
-- FastAPI - Web框架
-- SQLAlchemy - ORM
-- Pandas/NumPy - 数据处理
-- Scikit-learn/XGBoost - 机器学习
-- Jieba - 中文分词
-
-**前端:**
-
-- Vue 3 - 前端框架
-- Element Plus - UI组件
-- ECharts - 数据可视化
-- Axios - HTTP客户端
-- Pinia - 状态管理
-
-## 生产环境部署
-
-### 使用Docker Compose
-
-```bash
-# 构建并启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
-
-# 停止服务
-docker-compose down
+### Task (异步任务表)
+```python
+- id: 主键
+- task_type: 任务类型(crawl/train/predict)
+- status: 状态(pending/running/success/failed)
+- progress: 进度百分比
+- current_step: 当前步骤
+- result_dict: 任务结果(JSON)
 ```
 
-### 手动部署
+## 开发进度
 
-1. **后端部署**
+### ✅ 已完成
+- [x] FastAPI后端框架搭建
+- [x] SQLAlchemy ORM模型设计
+- [x] 39个API接口实现
+- [x] 文件上传和Excel解析
+- [x] 数据清洗和导入服务
+- [x] 特征工程模块
+- [x] XGBoost/线性回归模型训练
+- [x] 预测服务实现
+- [x] 可视化API接口
+- [x] Vue 3前端框架
+- [x] Element Plus UI集成
+- [x] ECharts图表集成
+- [x] 5个主要页面实现
+- [x] 前后端联调
 
-```bash
-# 使用gunicorn部署
-pip install gunicorn
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
-```
-
-2. **前端部署**
-
-```bash
-# 构建生产版本
-npm run build
-
-# 使用nginx托管
-# 配置nginx指向 frontend/dist 目录
-```
-
-3. **数据库**
-
-- 从SQLite迁移到MySQL
-- 更新 `DATABASE_URL` 配置
+### 🚧 待优化
+- [ ] Transformer模型实现
+- [ ] Celery异步任务队列
+- [ ] 评论情感分析
+- [ ] 用户认证系统
+- [ ] 单元测试
 
 ## 许可证
 
 本项目仅供学习研究使用。
+
+## 联系方式
+
+如有问题，请查看 [部署指南.md](./部署指南.md) 或提交Issue。
