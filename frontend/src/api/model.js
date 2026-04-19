@@ -1,6 +1,5 @@
 import request from './index'
 
-// 开始训练
 export function startTrain(params) {
   return request({
     url: '/model/train',
@@ -9,7 +8,6 @@ export function startTrain(params) {
   })
 }
 
-// 获取训练状态
 export function getTrainStatus(taskId) {
   return request({
     url: '/model/status',
@@ -18,7 +16,6 @@ export function getTrainStatus(taskId) {
   })
 }
 
-// 获取模型列表
 export function getModelList(modelType) {
   return request({
     url: '/model/list',
@@ -27,16 +24,14 @@ export function getModelList(modelType) {
   })
 }
 
-// 选择模型
-export function selectModel(modelId) {
+export function selectModel(modelType) {
   return request({
     url: '/model/select',
     method: 'post',
-    params: { model_id: modelId }
+    params: { model_type: modelType }
   })
 }
 
-// 获取模型指标
 export function getModelMetrics(modelType) {
   return request({
     url: `/model/metrics/${modelType}`,

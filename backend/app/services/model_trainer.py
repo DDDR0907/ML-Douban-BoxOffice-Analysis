@@ -11,6 +11,7 @@ from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 import xgboost as xgb
 import joblib
 from pathlib import Path
+from datetime import datetime
 
 from ..config import settings
 from ..database import SessionLocal
@@ -267,6 +268,7 @@ class ModelTrainer:
     def train_model(
         self,
         model_type: str = 'xgboost',
+        test_size: float = 0.3,
         tune_hyperparameters: bool = True,
         cross_validation: bool = True
     ) -> Dict[str, Any]:
@@ -299,7 +301,7 @@ class ModelTrainer:
 
         # 分割数据集
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.3, random_state=42
+            X, y, test_size=test_size, random_state=42
         )
 
         print(f"\n数据集分割:")
@@ -345,7 +347,7 @@ class ModelTrainer:
             print(f"  {feat}: {imp:.2%}")
 
         # 保存模型（包含特征工程管道）
-        version = f"{model_type}_v1.1"
+        version = f"v{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         model_path = self.model_dir / f"{model_type}_{version}.pkl"
 
         joblib.dump({
@@ -369,22 +371,37 @@ class ModelTrainer:
             'model_type': model_type,
             'version': version,
             'model_path': str(model_path),
+            'saved_at': datetime.now().isoformat(),
             'train_metrics': train_metrics,
             'test_metrics': test_metrics,
             'cv_results': cv_results,
             'feature_importance': feature_importance,
-            'feature_names': self.feature_pipeline.final_features
+            'feature_names': self.feature_pipeline.final_features,
+            'dataset_size': int(len(df)),
+            'train_size': int(len(X_train)),
+            'test_size': int(len(X_test)),
+            'test_ratio': float(test_size)
         }
 
-    def train_all_models(self) -> Dict[str, Any]:
+    def train_all_models(self, test_size: float = 0.3) -> Dict[str, Any]:
         """训练所有模型并对比"""
         results = {}
 
         # 训练线性回归
-        results['lr'] = self.train_model('lr', tune_hyperparameters=False, cross_validation=False)
+        results['lr'] = self.train_model(
+            'lr',
+            test_size=test_size,
+            tune_hyperparameters=False,
+            cross_validation=False
+        )
 
         # 训练XGBoost
-        results['xgboost'] = self.train_model('xgboost', tune_hyperparameters=True, cross_validation=True)
+        results['xgboost'] = self.train_model(
+            'xgboost',
+            test_size=test_size,
+            tune_hyperparameters=True,
+            cross_validation=True
+        )
 
         # 模型对比
         print(f"\n{'='*60}")

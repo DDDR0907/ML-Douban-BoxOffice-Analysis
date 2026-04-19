@@ -1,40 +1,71 @@
 """
 Visualization API
-可视化接口 - 提供各类图表数据
+Provide chart data for the frontend visualization pages.
 """
+from pathlib import Path
+from typing import Dict, Optional
+
+import joblib
+import numpy as np
+import pandas as pd
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from typing import Optional
-import json
 
+from ..config import settings
 from ..database import get_db
 from ..models.movie import Movie
+from ..services.feature_engineering import FeatureEngineering
 from ..services.model_utils import get_model_feature_importance
 
 router = APIRouter(prefix="/api/visualize", tags=["数据可视化"])
+
+MODEL_LABELS = {
+    "xgboost": "XGBoost",
+    "lr": "线性回归"
+}
+
+
+def _load_latest_model_data(model_type: str) -> Optional[Dict]:
+    """Load the newest saved model payload for the requested model type."""
+    model_dir = Path(settings.MODEL_DIR)
+    if not model_dir.exists():
+        return None
+
+    model_files = list(model_dir.glob(f"{model_type}_*.pkl"))
+    if not model_files:
+        return None
+
+    latest_model = max(model_files, key=lambda path: path.stat().st_mtime)
+    return joblib.load(latest_model)
+
+
+def _load_model_importance(model_type: str) -> Dict[str, float]:
+    """Return normalized feature importance for a saved model."""
+    model_data = _load_latest_model_data(model_type)
+    if not model_data:
+        return {}
+    return get_model_feature_importance(model_data)
 
 
 @router.get("/rating-boxoffice")
 async def rating_boxoffice_scatter(
     db: Session = Depends(get_db)
 ):
-    """
-    豆瓣评分 - 票房散点图数据
-    """
+    """评分 - 票房散点图数据。"""
     movies = db.query(Movie).filter(
         Movie.rating.isnot(None),
         Movie.box_office_wan.isnot(None)
-    ).limit(500).all()  # 限制数量以提高性能
+    ).limit(500).all()
 
     data = [
         {
-            "x": m.rating,
-            "y": m.box_office_wan,
-            "title": m.title,
-            "type": m.type,
-            "year": m.release_year
+            "x": movie.rating,
+            "y": movie.box_office_wan,
+            "title": movie.title,
+            "type": movie.type,
+            "year": movie.release_year
         }
-        for m in movies
+        for movie in movies
     ]
 
     return {
@@ -49,45 +80,38 @@ async def rating_boxoffice_scatter(
 async def genre_boxoffice_distribution(
     db: Session = Depends(get_db)
 ):
-    """
-    不同类型电影票房分布箱线图数据
-    """
+    """不同类型电影票房分布箱线图数据。"""
     movies = db.query(Movie).filter(
         Movie.type.isnot(None),
         Movie.box_office_wan.isnot(None)
     ).all()
 
-    # 按类型分组
     genre_data = {}
-    for m in movies:
-        if m.type:
-            if m.type not in genre_data:
-                genre_data[m.type] = []
-            genre_data[m.type].append(m.box_office_wan)
+    for movie in movies:
+        if movie.type:
+            genre_data.setdefault(movie.type, []).append(movie.box_office_wan)
 
-    # 转换为图表数据格式
     data = [
         {
             "type": genre,
             "values": values,
             "min": min(values) if values else 0,
             "max": max(values) if values else 0,
-            "median": sorted(values)[len(values)//2] if values else 0,
-            "q1": sorted(values)[len(values)//4] if len(values) > 4 else 0,
-            "q3": sorted(values)[len(values)*3//4] if len(values) > 4 else 0,
+            "median": sorted(values)[len(values) // 2] if values else 0,
+            "q1": sorted(values)[len(values) // 4] if len(values) > 4 else 0,
+            "q3": sorted(values)[len(values) * 3 // 4] if len(values) > 4 else 0,
         }
         for genre, values in genre_data.items()
-        if len(values) >= 5  # 至少5部电影
+        if len(values) >= 5
     ]
 
-    # 按中位数排序
-    data.sort(key=lambda x: x["median"], reverse=True)
+    data.sort(key=lambda item: item["median"], reverse=True)
 
     return {
         "chart_type": "boxplot",
         "x_axis": "电影类型",
         "y_axis": "票房（万元）",
-        "data": data[:10]  # 只返回前10个类型
+        "data": data[:10]
     }
 
 
@@ -95,49 +119,28 @@ async def genre_boxoffice_distribution(
 async def model_performance_comparison(
     db: Session = Depends(get_db)
 ):
-    """
-    模型性能对比图数据
-    """
-    from ..config import settings
-    from pathlib import Path
-    import joblib
-
-    model_dir = Path(settings.MODEL_DIR)
-
-    if not model_dir.exists():
-        return {
-            "chart_type": "bar",
-            "metrics": ["R²", "RMSE", "MAE"],
-            "models": {},
-            "message": "暂无训练模型"
-        }
-
+    """模型性能对比图数据。"""
+    _ = db
     models = {}
 
-    # 查找所有模型文件
     for model_type in ["lr", "xgboost"]:
-        model_files = list(model_dir.glob(f"{model_type}_*.pkl"))
-        if model_files:
-            try:
-                latest = max(model_files, key=lambda p: p.stat().st_mtime)
-                model_data = joblib.load(latest)
-                metrics = model_data.get('metrics', {})
+        try:
+            model_data = _load_latest_model_data(model_type)
+            if not model_data:
+                continue
 
-                # 获取测试集指标
-                test_metrics = model_data.get('test_metrics', metrics)
-
-                model_name = "XGBoost" if model_type == "xgboost" else "线性回归"
-                models[model_name] = {
-                    "R²": round(test_metrics.get('r2_score', 0), 4),
-                    "RMSE": round(test_metrics.get('rmse', 0), 2),
-                    "MAE": round(test_metrics.get('mae', 0), 2)
-                }
-            except Exception as e:
-                print(f"加载模型 {model_type} 失败: {e}")
+            test_metrics = model_data.get("test_metrics", model_data.get("metrics", {}))
+            models[MODEL_LABELS.get(model_type, model_type)] = {
+                "R2": round(test_metrics.get("r2_score", 0), 4),
+                "RMSE": round(test_metrics.get("rmse", 0), 2),
+                "MAE": round(test_metrics.get("mae", 0), 2)
+            }
+        except Exception as exc:
+            print(f"加载模型 {model_type} 失败: {exc}")
 
     return {
         "chart_type": "bar",
-        "metrics": ["R²", "RMSE", "MAE"],
+        "metrics": ["R2", "RMSE", "MAE"],
         "models": models
     }
 
@@ -147,64 +150,150 @@ async def feature_importance(
     model_type: str = Query("xgboost", description="模型类型"),
     db: Session = Depends(get_db)
 ):
-    """
-    特征重要性数据
-    """
-    from ..config import settings
-    from pathlib import Path
-    import joblib
+    """单模型特征重要性数据。"""
+    _ = db
+    importance_dict = _load_model_importance(model_type)
 
-    model_dir = Path(settings.MODEL_DIR)
-
-    if not model_dir.exists():
+    if not importance_dict:
         return {
             "model_type": model_type,
             "chart_type": "horizontal_bar",
             "data": [],
-            "message": "暂无训练模型"
+            "message": f"未找到 {MODEL_LABELS.get(model_type, model_type)} 模型特征重要性数据"
         }
 
-    # 查找模型文件
-    model_files = list(model_dir.glob(f"{model_type}_*.pkl"))
+    data = [
+        {
+            "feature": feature,
+            "importance": round(value * 100, 2)
+        }
+        for feature, value in importance_dict.items()
+    ]
 
-    if not model_files:
+    return {
+        "model_type": model_type,
+        "chart_type": "horizontal_bar",
+        "data": data[:15]
+    }
+
+
+@router.get("/feature-correlation-heatmap")
+async def feature_correlation_heatmap(
+    limit: int = Query(12, ge=4, le=20, description="除票房外最多展示的数值特征数量"),
+    db: Session = Depends(get_db)
+):
+    """数值特征与票房的相关性热力图数据。"""
+    movies = db.query(Movie).filter(Movie.box_office_wan.isnot(None)).all()
+
+    if not movies:
         return {
-            "model_type": model_type,
-            "chart_type": "horizontal_bar",
-            "data": [],
-            "message": f"未找到 {model_type} 模型"
+            "chart_type": "heatmap",
+            "features": [],
+            "matrix": [],
+            "message": "暂无可用于相关性分析的数据"
         }
 
-    try:
-        latest = max(model_files, key=lambda p: p.stat().st_mtime)
-        model_data = joblib.load(latest)
-        importance_dict = get_model_feature_importance(model_data)
+    df = pd.DataFrame([movie.to_dict() for movie in movies])
+    feature_engineering = FeatureEngineering()
+    df = feature_engineering.create_derived_features(df)
 
-        # 转换为图表格式
-        data = [
+    exclude_cols = {"id", "box_office"}
+    numeric_cols = [
+        column for column in df.select_dtypes(include=[np.number]).columns
+        if column not in exclude_cols
+    ]
+
+    if "box_office_wan" not in numeric_cols:
+        return {
+            "chart_type": "heatmap",
+            "features": [],
+            "matrix": [],
+            "message": "缺少票房数值字段，无法计算相关性"
+        }
+
+    corr_matrix = df[numeric_cols].corr().fillna(0)
+    if "box_office_wan" not in corr_matrix.columns:
+        return {
+            "chart_type": "heatmap",
+            "features": [],
+            "matrix": [],
+            "message": "无法计算票房相关性"
+        }
+
+    corr_with_target = corr_matrix["box_office_wan"].drop(labels=["box_office_wan"], errors="ignore")
+    top_features = corr_with_target.abs().sort_values(ascending=False).head(limit).index.tolist()
+    heatmap_features = top_features + ["box_office_wan"]
+    heatmap_matrix = corr_matrix.loc[heatmap_features, heatmap_features].round(4)
+
+    return {
+        "chart_type": "heatmap",
+        "target": "box_office_wan",
+        "features": heatmap_features,
+        "feature_labels": {
+            "box_office_wan": "票房（万元）"
+        },
+        "matrix": heatmap_matrix.values.tolist(),
+        "correlations": [
             {
                 "feature": feature,
-                "importance": round(value * 100, 2)  # 转为百分比
+                "correlation": round(float(corr_with_target[feature]), 4)
             }
-            for feature, value in importance_dict.items()
+            for feature in top_features
         ]
+    }
 
-        # 按重要性排序
-        data.sort(key=lambda x: x["importance"], reverse=True)
 
+@router.get("/multi-model-feature-importance")
+async def multi_model_feature_importance(
+    limit: int = Query(10, ge=5, le=20, description="展示的特征数量"),
+    db: Session = Depends(get_db)
+):
+    """多模型特征重要性对比数据。"""
+    _ = db
+    model_importance_map = {}
+
+    for model_type in ["xgboost", "lr"]:
+        importance = _load_model_importance(model_type)
+        if importance:
+            model_importance_map[model_type] = importance
+
+    if not model_importance_map:
         return {
-            "model_type": model_type,
-            "chart_type": "horizontal_bar",
-            "data": data[:15]  # 返回前15个特征
+            "chart_type": "grouped_bar",
+            "features": [],
+            "models": [],
+            "message": "暂无已训练模型的特征重要性数据"
         }
 
-    except Exception as e:
-        return {
+    feature_scores = {}
+    for importance in model_importance_map.values():
+        for feature, value in importance.items():
+            feature_scores[feature] = feature_scores.get(feature, 0.0) + value
+
+    selected_features = [
+        feature for feature, _ in sorted(
+            feature_scores.items(),
+            key=lambda item: item[1],
+            reverse=True
+        )[:limit]
+    ]
+
+    models = []
+    for model_type, importance in model_importance_map.items():
+        models.append({
             "model_type": model_type,
-            "chart_type": "horizontal_bar",
-            "data": [],
-            "error": str(e)
-        }
+            "model_name": MODEL_LABELS.get(model_type, model_type),
+            "values": [
+                round(float(importance.get(feature, 0.0)) * 100, 2)
+                for feature in selected_features
+            ]
+        })
+
+    return {
+        "chart_type": "grouped_bar",
+        "features": selected_features,
+        "models": models
+    }
 
 
 @router.get("/predict-comparison")
@@ -213,10 +302,7 @@ async def predict_vs_actual(
     limit: int = Query(20, description="返回数量"),
     db: Session = Depends(get_db)
 ):
-    """
-    预测vs实际票房对比图数据
-    """
-    # TODO: 从预测记录中获取数据
+    """预测 vs 实际票房对比图数据。"""
     from ..models.prediction import Prediction
 
     query = db.query(Prediction).filter(
@@ -230,13 +316,13 @@ async def predict_vs_actual(
     predictions = query.order_by(Prediction.id.desc()).limit(limit).all()
 
     data = []
-    for pred in predictions:
-        if pred.movie:
+    for prediction in predictions:
+        if prediction.movie:
             data.append({
-                "title": pred.movie.title,
-                "actual": pred.movie.box_office_wan,
-                "predicted": pred.predicted_box_office_wan,
-                "model_type": pred.model_type.value
+                "title": prediction.movie.title,
+                "actual": prediction.movie.box_office_wan,
+                "predicted": prediction.predicted_box_office_wan,
+                "model_type": prediction.model_type.value
             })
 
     return {
@@ -249,16 +335,14 @@ async def predict_vs_actual(
 async def boxoffice_year_trend(
     db: Session = Depends(get_db)
 ):
-    """
-    年度票房趋势图数据
-    """
+    """年度票房趋势图数据。"""
     from sqlalchemy import func
 
     results = db.query(
         Movie.release_year,
-        func.sum(Movie.box_office_wan).label('total_box_office'),
-        func.count(Movie.id).label('movie_count'),
-        func.avg(Movie.rating).label('avg_rating')
+        func.sum(Movie.box_office_wan).label("total_box_office"),
+        func.count(Movie.id).label("movie_count"),
+        func.avg(Movie.rating).label("avg_rating")
     ).filter(
         Movie.release_year.isnot(None),
         Movie.box_office_wan.isnot(None)
@@ -291,9 +375,7 @@ async def top_movies(
     limit: int = Query(20, description="返回数量"),
     db: Session = Depends(get_db)
 ):
-    """
-    Top电影榜单数据
-    """
+    """Top 电影榜单数据。"""
     query = db.query(Movie)
 
     if by == "box_office":
@@ -307,14 +389,14 @@ async def top_movies(
 
     data = [
         {
-            "rank": idx + 1,
-            "title": m.title,
-            "box_office": m.box_office_wan,
-            "rating": m.rating,
-            "year": m.release_year,
-            "type": m.type
+            "rank": index + 1,
+            "title": movie.title,
+            "box_office": movie.box_office_wan,
+            "rating": movie.rating,
+            "year": movie.release_year,
+            "type": movie.type
         }
-        for idx, m in enumerate(movies)
+        for index, movie in enumerate(movies)
     ]
 
     return {
@@ -327,14 +409,10 @@ async def top_movies(
 async def data_overview(
     db: Session = Depends(get_db)
 ):
-    """
-    数据概览统计
-    """
+    """数据概览统计。"""
     from sqlalchemy import func
     from ..models.prediction import Prediction
-    from ..models.task import Task
 
-    # 电影统计
     total_movies = db.query(func.count(Movie.id)).scalar()
     movies_with_box_office = db.query(func.count(Movie.id)).filter(
         Movie.box_office_wan.isnot(None)
@@ -343,39 +421,34 @@ async def data_overview(
         Movie.rating.isnot(None)
     ).scalar()
 
-    # 票房统计
     box_office_stats = db.query(
-        func.min(Movie.box_office_wan).label('min'),
-        func.max(Movie.box_office_wan).label('max'),
-        func.avg(Movie.box_office_wan).label('avg')
+        func.min(Movie.box_office_wan).label("min"),
+        func.max(Movie.box_office_wan).label("max"),
+        func.avg(Movie.box_office_wan).label("avg")
     ).filter(
         Movie.box_office_wan.isnot(None)
     ).first()
 
-    # 评分统计
     rating_stats = db.query(
-        func.min(Movie.rating).label('min'),
-        func.max(Movie.rating).label('max'),
-        func.avg(Movie.rating).label('avg')
+        func.min(Movie.rating).label("min"),
+        func.max(Movie.rating).label("max"),
+        func.avg(Movie.rating).label("avg")
     ).filter(
         Movie.rating.isnot(None)
     ).first()
 
-    # 预测统计
     total_predictions = db.query(func.count(Prediction.id)).scalar()
 
-    # 数据来源统计
     data_source_stats = db.query(
         Movie.data_source,
-        func.count(Movie.id).label('count')
+        func.count(Movie.id).label("count")
     ).group_by(
         Movie.data_source
     ).all()
 
-    # 年份分布
     year_distribution = db.query(
         Movie.release_year,
-        func.count(Movie.id).label('count')
+        func.count(Movie.id).label("count")
     ).filter(
         Movie.release_year.isnot(None)
     ).group_by(

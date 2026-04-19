@@ -1,6 +1,5 @@
 import request from './index'
 
-// 评分-票房散点图
 export function getRatingBoxOfficeData() {
   return request({
     url: '/visualize/rating-boxoffice',
@@ -8,7 +7,6 @@ export function getRatingBoxOfficeData() {
   })
 }
 
-// 类型票房分布
 export function getGenreDistribution() {
   return request({
     url: '/visualize/genre-distribution',
@@ -16,7 +14,6 @@ export function getGenreDistribution() {
   })
 }
 
-// 模型性能对比
 export function getModelComparison() {
   return request({
     url: '/visualize/model-comparison',
@@ -24,7 +21,6 @@ export function getModelComparison() {
   })
 }
 
-// 特征重要性
 export function getFeatureImportance(modelType) {
   return request({
     url: '/visualize/feature-importance',
@@ -33,7 +29,22 @@ export function getFeatureImportance(modelType) {
   })
 }
 
-// 预测vs实际对比
+export function getFeatureCorrelationHeatmap(limit = 12) {
+  return request({
+    url: '/visualize/feature-correlation-heatmap',
+    method: 'get',
+    params: { limit }
+  })
+}
+
+export function getMultiModelFeatureImportance(limit = 10) {
+  return request({
+    url: '/visualize/multi-model-feature-importance',
+    method: 'get',
+    params: { limit }
+  })
+}
+
 export function getPredictComparison(params) {
   return request({
     url: '/visualize/predict-comparison',
@@ -42,7 +53,6 @@ export function getPredictComparison(params) {
   })
 }
 
-// 年度趋势
 export function getYearTrend() {
   return request({
     url: '/visualize/year-trend',
@@ -50,7 +60,6 @@ export function getYearTrend() {
   })
 }
 
-// Top电影
 export function getTopMovies(by, limit) {
   return request({
     url: '/visualize/top-movies',
@@ -59,7 +68,6 @@ export function getTopMovies(by, limit) {
   })
 }
 
-// 数据概览
 export function getDataOverview() {
   return request({
     url: '/visualize/data-overview',
